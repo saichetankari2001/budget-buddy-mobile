@@ -76,4 +76,26 @@ void main() {
     verify(() => mockAuthStorage.clearToken()).called(1);
     expect(unauthorizedCalled, isTrue);
   });
+
+  test('does not clear the token or call onUnauthorized on a 401 from an auth endpoint', () async {
+    when(() => mockAuthStorage.readToken()).thenAnswer((_) async => null);
+    when(() => mockAuthStorage.clearToken()).thenAnswer((_) async {});
+    bool unauthorizedCalled = false;
+
+    final dio = createApiClient(mockAuthStorage, onUnauthorized: () => unauthorizedCalled = true);
+    final dioAdapter = DioAdapter(dio: dio);
+    dioAdapter.onPost(
+      '/api/auth/login',
+      (server) => server.reply(401, {'error': 'Invalid email or password.'}),
+      data: {'email': 'wrong@example.com', 'password': 'wrong'},
+    );
+
+    await expectLater(
+      dio.post('/api/auth/login', data: {'email': 'wrong@example.com', 'password': 'wrong'}),
+      throwsA(isA<DioException>()),
+    );
+
+    verifyNever(() => mockAuthStorage.clearToken());
+    expect(unauthorizedCalled, isFalse);
+  });
 }

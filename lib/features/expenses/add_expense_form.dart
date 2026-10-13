@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'expenses_providers.dart';
+import '../dashboard/dashboard_providers.dart';
 
 class AddExpenseForm extends ConsumerStatefulWidget {
   const AddExpenseForm({super.key});
@@ -36,6 +37,7 @@ class _AddExpenseFormState extends ConsumerState<AddExpenseForm> {
             date: DateTime.now(),
           );
       ref.invalidate(expensesProvider);
+      ref.invalidate(dashboardSummaryProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
       // A failed save stays visible as an explicit, retriable error — never dismissed as if it

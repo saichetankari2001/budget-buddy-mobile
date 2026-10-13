@@ -1,7 +1,18 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_state.dart';
 import 'signup_screen.dart';
+
+String _authErrorMessage(Object? error) {
+  if (error is DioException) {
+    final data = error.response?.data;
+    if (data is Map && data['error'] is String) {
+      return data['error'] as String;
+    }
+  }
+  return 'Something went wrong — try again.';
+}
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -39,7 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'Invalid email or password.',
+                  _authErrorMessage(authState.error),
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
