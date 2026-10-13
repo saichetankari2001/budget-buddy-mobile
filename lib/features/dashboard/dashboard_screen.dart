@@ -76,7 +76,12 @@ class _StartCycleFormState extends ConsumerState<_StartCycleForm> {
       final dio = ref.read(dioProvider);
       await dio.post('/api/cycles', data: {
         'startingAmount': amount,
-        'endDate': _endDate!.toIso8601String(),
+        // Repo A's createMoneyCycleSchema uses Zod's `.datetime()`, which requires a UTC-format
+        // string (trailing "Z"). showDatePicker returns a non-UTC DateTime, so a plain
+        // toIso8601String() omits the "Z" and the backend rejects it with "Invalid datetime" —
+        // confirmed against the real deployed API during manual verification. .toUtc() first to
+        // get the "Z" suffix the schema requires.
+        'endDate': _endDate!.toUtc().toIso8601String(),
       });
       ref.invalidate(activeCycleProvider);
       ref.invalidate(dashboardSummaryProvider);
