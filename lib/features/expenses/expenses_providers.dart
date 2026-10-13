@@ -40,11 +40,18 @@ class ExpensesRepository {
     // Any non-2xx response throws a DioException by default — this method intentionally does
     // NOT catch it. A failed save must propagate as a real error the UI shows, never be
     // swallowed into something that looks like success (see this plan's Review Focus item 5).
+    //
+    // date.toUtc() matters: the backend's Zod schema (createExpenseSchema) uses z.string().datetime(),
+    // which requires a UTC-suffixed ("Z") ISO-8601 string and rejects a local-time string with a 400.
+    // A plain DateTime (e.g. DateTime.now()) is local time, so its toIso8601String() has no trailing
+    // "Z" — same bug class Task 9 hit and fixed for the money-cycle endDate. Caught here via manual
+    // verification against the real deployed API (not by any unit test, since none exercises the real
+    // date string against the real Zod schema).
     await _dio.post('/api/expenses', data: {
       'amount': amount,
       'description': description,
       'categoryId': categoryId,
-      'date': date.toIso8601String(),
+      'date': date.toUtc().toIso8601String(),
     });
   }
 }
