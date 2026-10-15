@@ -1,7 +1,33 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_state.dart';
 import '../dashboard/dashboard_providers.dart';
 import '../expenses/expenses_providers.dart';
+
+/// Reads the real reason a chat message was rejected, instead of a generic fallback —
+/// specifically surfaces the server's own validation message (e.g. "too long") when present,
+/// since that's exactly the kind of failure a user can actually act on by editing their message.
+String _chatErrorMessage(Object error) {
+  if (error is DioException) {
+    final data = error.response?.data;
+    if (data is Map) {
+      final details = data['details'];
+      if (details is Map) {
+        final fieldErrors = details['fieldErrors'];
+        if (fieldErrors is Map) {
+          final messageErrors = fieldErrors['message'];
+          if (messageErrors is List && messageErrors.isNotEmpty) {
+            return 'Sorry, that message could not be sent — ${messageErrors.first}.';
+          }
+        }
+      }
+      if (data['error'] is String) {
+        return 'Sorry, that message could not be sent — ${data['error']}.';
+      }
+    }
+  }
+  return 'Sorry, that message could not be sent — try again.';
+}
 
 class CoachMessage {
   const CoachMessage({required this.content, required this.isUser});
@@ -27,8 +53,8 @@ class CoachMessagesNotifier extends Notifier<List<CoachMessage>> {
       ref.invalidate(dashboardSummaryProvider);
       ref.invalidate(activeCycleProvider);
       ref.invalidate(expensesProvider);
-    } catch (_) {
-      state = [...state, const CoachMessage(content: 'Sorry, that message could not be sent — try again.', isUser: false)];
+    } catch (error) {
+      state = [...state, CoachMessage(content: _chatErrorMessage(error), isUser: false)];
     }
   }
 }

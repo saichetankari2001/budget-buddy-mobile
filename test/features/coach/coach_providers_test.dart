@@ -67,4 +67,52 @@ void main() {
     expect(cycleRebuilt, isTrue);
     expect(expensesRebuilt, isTrue);
   });
+
+  test('a validation failure (e.g. message too long) surfaces the real server reason, not a generic error', () async {
+    final dio = Dio();
+    final dioAdapter = DioAdapter(dio: dio);
+    final longMessage = 'a' * 3001;
+    dioAdapter.onPost(
+      '/api/cycles/chat',
+      (server) => server.reply(
+        400,
+        {
+          'error': 'Validation failed',
+          'details': {
+            'fieldErrors': {
+              'message': ['String must contain at most 3000 character(s)'],
+            },
+          },
+        },
+      ),
+      data: {'message': longMessage},
+    );
+
+    final container = ProviderContainer(overrides: [dioProvider.overrideWithValue(dio)]);
+    addTearDown(container.dispose);
+
+    await container.read(coachMessagesProvider.notifier).sendMessage(longMessage);
+
+    final messages = container.read(coachMessagesProvider);
+    expect(messages, hasLength(2));
+    expect(messages[1].content, contains('String must contain at most 3000 character(s)'));
+  });
+
+  test('a non-validation failure (e.g. network error) falls back to the generic message', () async {
+    final dio = Dio();
+    final dioAdapter = DioAdapter(dio: dio);
+    dioAdapter.onPost(
+      '/api/cycles/chat',
+      (server) => server.reply(500, {'error': 'Internal server error'}),
+      data: {'message': 'hi'},
+    );
+
+    final container = ProviderContainer(overrides: [dioProvider.overrideWithValue(dio)]);
+    addTearDown(container.dispose);
+
+    await container.read(coachMessagesProvider.notifier).sendMessage('hi');
+
+    final messages = container.read(coachMessagesProvider);
+    expect(messages[1].content, 'Sorry, that message could not be sent — Internal server error.');
+  });
 }
