@@ -8,6 +8,97 @@ import 'package:budget_buddy_mobile/features/dashboard/dashboard_providers.dart'
 import 'package:budget_buddy_mobile/features/expenses/expenses_providers.dart';
 
 void main() {
+  test('loads the saved conversation from the active cycle on startup, oldest message first', () async {
+    final dio = Dio();
+    final dioAdapter = DioAdapter(dio: dio);
+    dioAdapter.onGet(
+      '/api/cycles/active',
+      (server) => server.reply(200, {
+        'id': 'cycle_1',
+        'messages': [
+          {'id': 'm3', 'kind': 'CHAT', 'content': 'Anything else?'},
+          {'id': 'm2', 'kind': 'USER', 'content': 'I spent \$5 on coffee'},
+          {'id': 'm1', 'kind': 'PLAN', 'content': 'Welcome to your first cycle.'},
+        ],
+      }),
+    );
+
+    final container = ProviderContainer(overrides: [dioProvider.overrideWithValue(dio)]);
+    addTearDown(container.dispose);
+
+    final notifier = container.read(coachMessagesProvider.notifier);
+    await notifier.historyLoaded;
+
+    final messages = container.read(coachMessagesProvider);
+    expect(messages, hasLength(3));
+    expect(messages[0].content, 'Welcome to your first cycle.');
+    expect(messages[0].isUser, isFalse);
+    expect(messages[1].content, 'I spent \$5 on coffee');
+    expect(messages[1].isUser, isTrue);
+    expect(messages[2].content, 'Anything else?');
+    expect(messages[2].isUser, isFalse);
+  });
+
+  test('starts with an empty list, without crashing, when there is no active cycle yet', () async {
+    final dio = Dio();
+    final dioAdapter = DioAdapter(dio: dio);
+    dioAdapter.onGet('/api/cycles/active', (server) => server.reply(200, null));
+
+    final container = ProviderContainer(overrides: [dioProvider.overrideWithValue(dio)]);
+    addTearDown(container.dispose);
+
+    final notifier = container.read(coachMessagesProvider.notifier);
+    await notifier.historyLoaded;
+
+    expect(container.read(coachMessagesProvider), isEmpty);
+  });
+
+  test('starts with an empty list, without crashing, when loading history fails', () async {
+    final dio = Dio();
+    final dioAdapter = DioAdapter(dio: dio);
+    dioAdapter.onGet('/api/cycles/active', (server) => server.reply(500, {'error': 'Internal server error'}));
+
+    final container = ProviderContainer(overrides: [dioProvider.overrideWithValue(dio)]);
+    addTearDown(container.dispose);
+
+    final notifier = container.read(coachMessagesProvider.notifier);
+    await notifier.historyLoaded;
+
+    expect(container.read(coachMessagesProvider), isEmpty);
+  });
+
+  test('loaded history is prepended before any message sent in the same session', () async {
+    final dio = Dio();
+    final dioAdapter = DioAdapter(dio: dio);
+    dioAdapter.onGet(
+      '/api/cycles/active',
+      (server) => server.reply(200, {
+        'id': 'cycle_1',
+        'messages': [
+          {'id': 'm1', 'kind': 'PLAN', 'content': 'Welcome to your first cycle.'},
+        ],
+      }),
+    );
+    dioAdapter.onPost(
+      '/api/cycles/chat',
+      (server) => server.reply(200, {'reply': 'Logged your coffee.'}),
+      data: {'message': 'I spent \$5 on coffee'},
+    );
+
+    final container = ProviderContainer(overrides: [dioProvider.overrideWithValue(dio)]);
+    addTearDown(container.dispose);
+
+    final notifier = container.read(coachMessagesProvider.notifier);
+    await notifier.historyLoaded;
+    await notifier.sendMessage('I spent \$5 on coffee');
+
+    final messages = container.read(coachMessagesProvider);
+    expect(messages, hasLength(3));
+    expect(messages[0].content, 'Welcome to your first cycle.');
+    expect(messages[1].content, 'I spent \$5 on coffee');
+    expect(messages[2].content, 'Logged your coffee.');
+  });
+
   test('sendMessage appends the user message then the coach reply to the message list', () async {
     final dio = Dio();
     final dioAdapter = DioAdapter(dio: dio);

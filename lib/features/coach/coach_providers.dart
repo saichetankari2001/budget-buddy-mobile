@@ -36,8 +36,39 @@ class CoachMessage {
 }
 
 class CoachMessagesNotifier extends Notifier<List<CoachMessage>> {
+  Future<void>? _historyLoaded;
+
+  /// Exposed so tests can await the startup history fetch deterministically instead of
+  /// racing it with an arbitrary delay.
+  Future<void>? get historyLoaded => _historyLoaded;
+
   @override
-  List<CoachMessage> build() => [];
+  List<CoachMessage> build() {
+    _historyLoaded = _loadHistory();
+    return [];
+  }
+
+  // The chat screen otherwise starts blank on every app launch even though the conversation is
+  // saved server-side (the web app already shows it) — fetch and prepend it once, silently
+  // falling back to an empty chat if there's no active cycle yet or the request fails, since the
+  // user can still start a fresh conversation either way.
+  Future<void> _loadHistory() async {
+    try {
+      final dio = ref.read(dioProvider);
+      final response = await dio.get('/api/cycles/active');
+      final data = response.data as Map<String, dynamic>?;
+      if (data == null) return;
+
+      final rawMessages = (data['messages'] as List).cast<Map<String, dynamic>>();
+      // The server returns newest-first; the chat view wants oldest-first.
+      final loaded = rawMessages.reversed
+          .map((m) => CoachMessage(content: m['content'] as String, isUser: m['kind'] == 'USER'))
+          .toList();
+      state = [...loaded, ...state];
+    } catch (_) {
+      // Swallowed deliberately — a failed history fetch shouldn't block sending new messages.
+    }
+  }
 
   Future<void> sendMessage(String message) async {
     state = [...state, CoachMessage(content: message, isUser: true)];
