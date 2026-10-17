@@ -28,7 +28,10 @@ class AuthStateNotifier extends AsyncNotifier<AuthResult> {
   }
 
   Future<void> login(String email, String password) async {
-    state = const AsyncLoading();
+    // copyWithPrevious keeps isReloading true during this transition — _RootGate's
+    // skipLoadingOnReload (main.dart) relies on that flag to keep showing the current screen
+    // instead of flashing the full-screen spinner over it.
+    state = const AsyncLoading<AuthResult>().copyWithPrevious(state);
     try {
       final dio = ref.read(dioProvider);
       final response = await dio.post('/api/auth/login', data: {'email': email, 'password': password});
@@ -41,7 +44,7 @@ class AuthStateNotifier extends AsyncNotifier<AuthResult> {
   }
 
   Future<void> signup(String email, String password) async {
-    state = const AsyncLoading();
+    state = const AsyncLoading<AuthResult>().copyWithPrevious(state);
     try {
       final dio = ref.read(dioProvider);
       final response = await dio.post('/api/auth/signup', data: {'email': email, 'password': password});
